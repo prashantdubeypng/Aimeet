@@ -1,0 +1,727 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Video Meeting Room">
+    <title>{{ room.title }} - Meeting</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css">
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0e27;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .meeting-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .meeting-title {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .room-code-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        
+        .video-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 10px;
+            padding: 20px;
+            height: calc(100vh - 150px);
+            min-height: 400px;
+            background: #0a0e27;
+        }
+        
+        .video-frame {
+            background: #1a1a2e;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .video-frame video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .video-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 13px;
+            z-index: 10;
+            font-weight: bold;
+        }
+        
+        #local-video {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        #local-video video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            background: #000;
+            -webkit-transform: scaleX(-1);
+            transform: scaleX(-1);
+        }
+        
+        #remote-video {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        #remote-video video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            background: #000;
+        }
+        
+        .controls {
+            background: #1a1a2e;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+        
+        .btn-mute {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-mute:hover {
+            background: #764ba2;
+        }
+        
+        .btn-mute.active {
+            background: #ff6b6b;
+        }
+        
+        .btn-video {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-video:hover {
+            background: #764ba2;
+        }
+        
+        .btn-video.active {
+            background: #ff6b6b;
+        }
+        
+        .btn-end {
+            background: #ff6b6b;
+            color: white;
+        }
+        
+        .btn-end:hover {
+            background: #cc5555;
+        }
+        
+        .btn-record {
+            background: #26a69a;
+            color: white;
+        }
+        
+        .btn-record:hover {
+            background: #1e8873;
+        }
+        
+        .btn-record.recording {
+            background: #ff6b6b;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .btn-copy {
+            background: #26a69a;
+            color: white;
+        }
+        
+        .btn-copy:hover {
+            background: #1e8873;
+        }
+        
+        .info-panel {
+            background: #1a1a2e;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .participant-count {
+            display: inline-block;
+            background: #667eea;
+            padding: 5px 15px;
+            border-radius: 20px;
+            margin: 0 10px;
+        }
+    </style>
+
+</head>
+<body data-is-host="{{ is_host|yesno:'true,false' }}">
+    <div class="meeting-header">
+        <div class="meeting-title">{{ room.title }}</div>
+        <div class="room-code-badge">Code: {{ room.room_code }}</div>
+    </div>
+
+    <div class="info-panel">
+        <button class="control-btn btn-copy" onclick="copyRoomCode()">
+            📋 Copy Room Code
+        </button>
+        <span class="participant-count" id="participant-count">👥 Participants: 1</span>
+    </div>
+
+    <div class="video-container" id="video-container">
+        <div class="video-frame">
+            <div id="local-video"></div>
+            <div class="video-label">You (Local)</div>
+        </div>
+        <div class="video-frame" id="remote-container" style="display:none;">
+            <div id="remote-video"></div>
+            <div class="video-label">Remote User</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        {% if is_host %}
+        <button class="control-btn btn-record" id="record-toggle" onclick="toggleRecording()">
+            <span id="record-icon">⏺️</span> Start Recording
+        </button>
+        {% else %}
+        <button class="control-btn" disabled style="background:#555; cursor:not-allowed;">
+            🔒 Recording (Host Only)
+        </button>
+        {% endif %}
+        <button class="control-btn btn-mute" id="audio-toggle" onclick="toggleAudio()">
+            <span id="audio-icon">🎤</span> Mute
+        </button>
+        <button class="control-btn btn-video" id="video-toggle" onclick="toggleVideo()">
+            <span id="video-icon">📹</span> Hide Video
+        </button>
+        {% if is_host %}
+        <button class="control-btn btn-end" onclick="endMeeting()">
+            ✋ End Meeting
+        </button>
+        {% else %}
+        <button class="control-btn btn-end" onclick="leaveMeeting()">
+            ✋ Leave Meeting
+        </button>
+        {% endif %}
+    </div>
+
+    <script>
+        const ROOM_CODE = "{{ room_code }}";
+        const ROOM_ID = "{{ room_id }}";
+        const IS_HOST = document.body.dataset.isHost === "true";
+        const CSRF_TOKEN = "{{ csrf_token }}";
+        
+        let client = null;
+        let localStream = null;
+        let remoteStream = null;
+        let audioMuted = false;
+        let videoMuted = false;
+        let participantCount = 1;
+
+        class MeetingManager {
+            constructor() {
+                this.client = null;
+                this.localAudioTrack = null;
+                this.localVideoTrack = null;
+                this.remoteUsers = {};
+                this.uid = null; // Will be set from server
+            }
+
+            async initAgora(appId) {
+                try {
+                    this.client = AgoraRTC.createClient({ 
+                        mode: "rtc", 
+                        codec: "vp8"
+                    });
+
+                    this.client.on("user-published", async (user, mediaType) => {
+                        console.log("User published:", user.uid, mediaType);
+                        await this.client.subscribe(user, mediaType);
+
+                        if (mediaType === "video") {
+                            this.remoteUsers[user.uid] = user;
+                            document.getElementById("remote-container").style.display = "block";
+                            user.videoTrack.play("remote-video");
+                        }
+                        if (mediaType === "audio") {
+                            user.audioTrack.play();
+                        }
+                        updateParticipantCount();
+                    });
+
+                    this.client.on("user-unpublished", (user, mediaType) => {
+                        console.log("User unpublished:", user.uid, mediaType);
+                        if (mediaType === "video") {
+                            user.videoTrack.stop();
+                        }
+                        if (mediaType === "audio") {
+                            user.audioTrack.stop();
+                        }
+                    });
+
+                    this.client.on("user-left", (user) => {
+                        console.log("User left:", user.uid);
+                        delete this.remoteUsers[user.uid];
+                        if (Object.keys(this.remoteUsers).length === 0) {
+                            document.getElementById("remote-container").style.display = "none";
+                        }
+                        updateParticipantCount();
+                    });
+
+                    console.log("Agora client initialized successfully");
+                    return true;
+                } catch (error) {
+                    console.error("Error initializing Agora:", error);
+                    alert("Failed to initialize Agora: " + error.message);
+                    return false;
+                }
+            }
+
+            async getToken() {
+                try {
+                    const response = await fetch('/token/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': CSRF_TOKEN,
+                        },
+                        body: JSON.stringify({ channelName: ROOM_ID })
+                    });
+                    const data = await response.json();
+                    console.log("Token received:", data);
+                    return data;
+                } catch (error) {
+                    console.error('Error getting token:', error);
+                    alert("Failed to get token: " + error.message);
+                    return null;
+                }
+            }
+
+            async joinRoom() {
+                try {
+                    console.log("Getting token for channel:", ROOM_ID);
+                    const tokenData = await this.getToken();
+                    
+                    if (!tokenData || !tokenData.token) {
+                        alert('Failed to get valid token');
+                        return false;
+                    }
+
+                    // Set UID from server response
+                    this.uid = tokenData.uid;
+                    console.log("Using UID from server:", this.uid);
+
+                    const initialized = await this.initAgora(tokenData.appID);
+                    if (!initialized) {
+                        return false;
+                    }
+
+                    console.log("Joining channel:", ROOM_ID, "with UID:", this.uid);
+                    
+                    await this.client.join(
+                        tokenData.appID,
+                        ROOM_ID,
+                        tokenData.token,
+                        this.uid
+                    );
+
+                    console.log("Successfully joined channel");
+                    await this.createLocalStream();
+                    return true;
+                } catch (error) {
+                    console.error('Error joining room:', error);
+                    alert('Failed to join room: ' + error.message);
+                    return false;
+                }
+            }
+
+            async createLocalStream() {
+                try {
+                    console.log("Creating local stream...");
+                    
+                    // Request camera and microphone access
+                    this.localAudioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                    this.localVideoTrack = await AgoraRTC.createCameraVideoTrack();
+
+                    console.log("Local tracks created successfully");
+                    
+                    // Play local video
+                    this.localVideoTrack.play("local-video");
+
+                    // Publish local stream
+                    await this.client.publish([this.localAudioTrack, this.localVideoTrack]);
+                    console.log("Local stream published successfully");
+                } catch (error) {
+                    console.error("Error creating local stream:", error);
+                    if (error.name === "NotAllowedError") {
+                        alert("Camera/Microphone access was denied. Please check your browser permissions.");
+                    } else if (error.name === "NotFoundError") {
+                        alert("No camera or microphone found on your device.");
+                    } else {
+                        alert("Error accessing camera/microphone: " + error.message);
+                    }
+                }
+            }
+
+            toggleAudio() {
+                if (this.localAudioTrack) {
+                    this.localAudioTrack.setEnabled(!this.localAudioTrack.enabled);
+                    return !this.localAudioTrack.enabled;
+                }
+                return false;
+            }
+
+            toggleVideo() {
+                if (this.localVideoTrack) {
+                    this.localVideoTrack.setEnabled(!this.localVideoTrack.enabled);
+                    return !this.localVideoTrack.enabled;
+                }
+                return false;
+            }
+
+            async leaveRoom() {
+                try {
+                    console.log("Leaving meeting...");
+                    
+                    if (this.localAudioTrack) {
+                        this.localAudioTrack.close();
+                    }
+                    if (this.localVideoTrack) {
+                        this.localVideoTrack.close();
+                    }
+                    
+                    await this.client.leave();
+                    console.log("Left channel successfully");
+                } catch (error) {
+                    console.error("Error leaving room:", error);
+                }
+            }
+        }
+
+        const meeting = new MeetingManager();
+
+        class LocalAudioRecorder {
+            constructor() {
+                this.isRecording = false;
+                this.recordingStartTime = null;
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+            }
+
+            async startRecording() {
+                try {
+                    if (!IS_HOST) {
+                        alert("Only the host can start recording");
+                        return false;
+                    }
+
+                    if (!meeting.localAudioTrack) {
+                        alert("Please wait for audio to be ready");
+                        return false;
+                    }
+
+                    console.log("Starting local audio recording...");
+                    
+                    // Get audio stream from Agora's local audio track
+                    const audioStream = meeting.localAudioTrack.getMediaStreamTrack();
+                    const stream = new MediaStream([audioStream]);
+
+                    // Create MediaRecorder for audio-only
+                    this.mediaRecorder = new MediaRecorder(stream, {
+                        mimeType: 'audio/webm;codecs=opus'
+                    });
+
+                    this.audioChunks = [];
+                    this.recordingStartTime = Date.now();
+
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            this.audioChunks.push(event.data);
+                            console.log("Audio chunk recorded:", event.data.size, "bytes");
+                        }
+                    };
+
+                    this.mediaRecorder.onstop = async () => {
+                        await this.uploadRecording();
+                    };
+
+                    this.mediaRecorder.onerror = (error) => {
+                        console.error("MediaRecorder error:", error);
+                        alert("Recording error: " + error);
+                    };
+
+                    // Start recording (collect chunks every 1 second)
+                    this.mediaRecorder.start(1000);
+                    this.isRecording = true;
+                    
+                    console.log("Audio recording started successfully");
+                    alert("Audio recording started! Recording in progress...");
+                    return true;
+                    
+                } catch (error) {
+                    console.error("Error starting recording:", error);
+                    alert("Error starting recording: " + error.message);
+                    return false;
+                }
+            }
+
+            async stopRecording() {
+                try {
+                    if (!IS_HOST) {
+                        alert("Only the host can stop recording");
+                        return false;
+                    }
+
+                    if (!this.mediaRecorder || !this.isRecording) {
+                        alert("No active recording to stop");
+                        return false;
+                    }
+
+                    console.log("Stopping audio recording...");
+                    
+                    this.mediaRecorder.stop();
+                    this.isRecording = false;
+                    
+                    const duration = Math.round((Date.now() - this.recordingStartTime) / 1000);
+                    console.log(`Recording stopped. Duration: ${duration}s, Chunks: ${this.audioChunks.length}`);
+                    
+                    return true;
+                    
+                } catch (error) {
+                    console.error("Error stopping recording:", error);
+                    alert("Error stopping recording: " + error.message);
+                    return false;
+                }
+            }
+
+            async uploadRecording() {
+                try {
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                    const duration = (Date.now() - this.recordingStartTime) / 1000;
+
+                    console.log(`Uploading recording: ${audioBlob.size} bytes, ${duration}s duration`);
+
+                    const formData = new FormData();
+                    formData.append('recording', audioBlob, `${ROOM_CODE}_${Date.now()}.webm`);
+                    formData.append('duration', duration);
+
+                    const response = await fetch(`/meeting/${ROOM_CODE}/upload-recording/`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': CSRF_TOKEN,
+                        },
+                        body: formData
+                    });
+
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        console.log("Recording uploaded successfully:", data);
+                        alert(`Recording saved! Duration: ${Math.round(duration)}s\nFile: ${data.filename}`);
+                    } else {
+                        console.error("Upload failed:", data);
+                        alert("Failed to upload recording: " + (data.error || "Unknown error"));
+                    }
+                } catch (error) {
+                    console.error("Error uploading recording:", error);
+                    alert("Error uploading recording: " + error.message);
+                }
+            }
+        }
+
+        const recorder = new LocalAudioRecorder();
+
+        function toggleRecording() {
+            if (!IS_HOST) {
+                alert("Only the host can control recording");
+                return;
+            }
+            
+            const btn = document.getElementById("record-toggle");
+            
+            if (!recorder.isRecording) {
+                recorder.startRecording().then(success => {
+                    if (success) {
+                        btn.classList.add("recording");
+                        btn.innerHTML = '<span id="record-icon">⏹️</span> Stop Recording';
+                    }
+                });
+            } else {
+                recorder.stopRecording().then(success => {
+                    if (success) {
+                        btn.classList.remove("recording");
+                        btn.innerHTML = '<span id="record-icon">⏺️</span> Start Recording';
+                    }
+                });
+            }
+        }
+
+        function toggleAudio() {
+            const isAudioMuted = meeting.toggleAudio();
+            const btn = document.getElementById("audio-toggle");
+            
+            if (isAudioMuted) {
+                btn.classList.add("active");
+                btn.innerHTML = '<span id="audio-icon">🔇</span> Unmute';
+            } else {
+                btn.classList.remove("active");
+                btn.innerHTML = '<span id="audio-icon">🎤</span> Mute';
+            }
+        }
+
+        function toggleVideo() {
+            const isVideoMuted = meeting.toggleVideo();
+            const btn = document.getElementById("video-toggle");
+            
+            if (isVideoMuted) {
+                btn.classList.add("active");
+                btn.innerHTML = '<span id="video-icon">📹‍♥️</span> Show Video';
+            } else {
+                btn.classList.remove("active");
+                btn.innerHTML = '<span id="video-icon">📹</span> Hide Video';
+            }
+        }
+
+        async function leaveMeeting() {
+            // If recording is active and user is host, warn them
+            if (IS_HOST && recorder.isRecording) {
+                if (!confirm("Recording is active. Leaving will stop the recording. Continue?")) {
+                    return;
+                }
+                await recorder.stopRecording();
+            }
+            await meeting.leaveRoom();
+            window.location.href = "{% url 'home' %}";
+        }
+
+        async function endMeeting() {
+            if (!confirm('End this meeting for all participants?')) return;
+            
+            // Stop recording if active
+            if (IS_HOST && recorder.isRecording) {
+                await recorder.stopRecording();
+            }
+            
+            try {
+                await fetch("{% url 'end_meeting' room.room_code %}", {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                    }
+                });
+            } catch (error) {
+                console.error('Error ending meeting:', error);
+            }
+            
+            await meeting.leaveRoom();
+            window.location.href = "{% url 'home' %}";
+        }
+
+        function updateParticipantCount() {
+            const remoteCount = Object.keys(meeting.remoteUsers).length;
+            const totalCount = remoteCount + 1; // +1 for self
+            document.getElementById("participant-count").textContent = "👥 Participants: " + totalCount;
+        }
+
+        function copyRoomCode() {
+            const code = "{{ room.room_code }}";
+            navigator.clipboard.writeText(code).then(() => {
+                alert("Room code copied: " + code);
+            });
+        }
+
+        // Initialize meeting when page loads
+        window.addEventListener('load', () => {
+            console.log("Page loaded, initializing meeting...");
+            meeting.joinRoom().then((success) => {
+                if (!success) {
+                    console.error("Failed to join meeting");
+                }
+            });
+        });
+
+        // Cleanup on page leave
+        window.addEventListener('beforeunload', async () => {
+            console.log("Page unloading, leaving meeting...");
+            await meeting.leaveRoom();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,424 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Meetings</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            background: #f5f5f5;
+            padding-top: 20px;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 24px;
+        }
+        .container-main {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .left-panel,
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .welcome-section {
+            background: white;
+            padding: 24px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .welcome-section h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .btn-action {
+            padding: 12px 30px;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        .btn-create {
+            background: #667eea;
+            color: white;
+            border: none;
+        }
+        .btn-create:hover {
+            background: #764ba2;
+            color: white;
+            text-decoration: none;
+        }
+        .btn-join {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        .btn-join:hover {
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+        }
+        .rooms-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .chat-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 600px;
+        }
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        .toggle-group {
+            display: flex;
+            gap: 10px;
+        }
+        .toggle-btn {
+            border: 1px solid #667eea;
+            background: white;
+            color: #667eea;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .toggle-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        .chat-window {
+            flex: 1;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 15px;
+            overflow-y: auto;
+            background: #fafafa;
+            margin-bottom: 12px;
+        }
+        .chat-message {
+            margin-bottom: 12px;
+        }
+        .chat-message .meta {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .chat-message .bubble {
+            display: inline-block;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #eef1ff;
+            color: #333;
+        }
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input input {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            padding: 10px 14px;
+        }
+        .chat-input button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 20px;
+        }
+        .recording-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .recording-item {
+            padding: 12px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: #fafafa;
+        }
+        @media (max-width: 992px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            .chat-section {
+                min-height: 500px;
+            }
+        }
+        .rooms-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .room-card {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .room-card:hover {
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
+        }
+        .room-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .room-code {
+            background: #667eea;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            display: inline-block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .room-host {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .room-action {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-join-room {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .btn-join-room:hover {
+            background: #764ba2;
+            text-decoration: none;
+            color: white;
+        }
+        .no-rooms {
+            text-align: center;
+            color: #999;
+            padding: 40px 20px;
+        }
+        .navbar-logout {
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'home' %}">📹 Video Meeting</a>
+            <div class="navbar-logout">
+                <span class="text-white mr-3">Hello, {{ user.username }}!</span>
+                <a href="{% url 'logout' %}" class="btn btn-light btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-main">
+        <div class="dashboard">
+            <div class="left-panel">
+                <div class="welcome-section">
+                    <h1>Welcome, {{ user.username }}! 👋</h1>
+                    <p>Start a new meeting or join an existing one</p>
+                    <div class="action-buttons">
+                        <a href="{% url 'create_room' %}" class="btn btn-action btn-create">➕ Create Meeting</a>
+                        <a href="{% url 'join_room' %}" class="btn btn-action btn-join">🔗 Join Meeting</a>
+                    </div>
+                </div>
+
+                {% if user_rooms %}
+                <div class="rooms-section">
+                    <h2>Your Meetings</h2>
+                    {% for room in user_rooms %}
+                    <div class="room-card">
+                        <div class="room-title">{{ room.title }}</div>
+                        <span class="room-code">Code: {{ room.room_code }}</span>
+                        <div class="room-host">Hosted by you</div>
+                        {% if room.description %}
+                            <p style="color: #666; font-size: 14px; margin-bottom: 10px;">{{ room.description }}</p>
+                        {% endif %}
+                        <div class="room-action">
+                            <a href="{% url 'meeting' room.room_code %}" class="btn-join-room">Join Meeting</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="rooms-section">
+                    <h2>Available Meetings</h2>
+                    {% if all_rooms %}
+                        {% for room in all_rooms %}
+                        <div class="room-card">
+                            <div class="room-title">{{ room.title }}</div>
+                            <span class="room-code">Code: {{ room.room_code }}</span>
+                            <div class="room-host">Hosted by <strong>{{ room.host.username }}</strong></div>
+                            {% if room.description %}
+                                <p style="color: #666; font-size: 14px; margin-bottom: 10px;">{{ room.description }}</p>
+                            {% endif %}
+                            <div class="room-action">
+                                <a href="{% url 'meeting' room.room_code %}" class="btn-join-room">Join Meeting</a>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-rooms">
+                            <p>No active meetings available</p>
+                            <p><a href="{% url 'create_room' %}">Create one now!</a></p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="chat-section">
+                    <div class="chat-header">
+                        <h2 style="margin:0;">Chat</h2>
+                        <div class="toggle-group">
+                            <button class="toggle-btn active" id="chat-tab" onclick="showChat()">Chat History</button>
+                            <button class="toggle-btn" id="recording-tab" onclick="showRecordings()">Recordings</button>
+                        </div>
+                    </div>
+
+                    <div id="chat-panel">
+                        <div class="chat-window" id="chat-window"></div>
+                        <div class="chat-input">
+                            <input type="text" id="chat-input" placeholder="Type a message..." />
+                            <button onclick="sendChatMessage()">Send</button>
+                        </div>
+                    </div>
+
+                    <div id="recording-panel" style="display:none;">
+                        <div class="chat-window">
+                            <ul class="recording-list">
+                                <li class="recording-item">
+                                    <strong>No recordings yet.</strong>
+                                    <div style="color:#777; font-size:13px;">Recordings will appear here after meetings.</div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CSRF_TOKEN = "{{ csrf_token }}";
+
+        function showChat() {
+            document.getElementById('chat-panel').style.display = 'block';
+            document.getElementById('recording-panel').style.display = 'none';
+            document.getElementById('chat-tab').classList.add('active');
+            document.getElementById('recording-tab').classList.remove('active');
+        }
+
+        function showRecordings() {
+            document.getElementById('chat-panel').style.display = 'none';
+            document.getElementById('recording-panel').style.display = 'block';
+            document.getElementById('chat-tab').classList.remove('active');
+            document.getElementById('recording-tab').classList.add('active');
+        }
+
+        function renderChatMessage(user, content, createdAt) {
+            const chatWindow = document.getElementById('chat-window');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chat-message';
+            const timeLabel = createdAt ? new Date(createdAt).toLocaleTimeString() : 'just now';
+            wrapper.innerHTML = `
+                <div class="meta">${user} • ${timeLabel}</div>
+                <div class="bubble"></div>
+            `;
+            wrapper.querySelector('.bubble').textContent = content;
+            chatWindow.appendChild(wrapper);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        async function loadChatHistory() {
+            const chatWindow = document.getElementById('chat-window');
+            chatWindow.innerHTML = '';
+            try {
+                const response = await fetch('/chat/messages/', { method: 'GET' });
+                const data = await response.json();
+                if (response.ok && data.messages) {
+                    if (data.messages.length === 0) {
+                        renderChatMessage('System', 'Welcome! This is your meeting chat space.', null);
+                        return;
+                    }
+                    data.messages.forEach(msg => {
+                        renderChatMessage(msg.user, msg.content, msg.created_at);
+                    });
+                }
+            } catch (error) {
+                renderChatMessage('System', 'Unable to load chat history.', null);
+            }
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            try {
+                const response = await fetch('/chat/messages/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': CSRF_TOKEN
+                    },
+                    body: JSON.stringify({ content: text })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    renderChatMessage(data.user, data.content, data.created_at);
+                } else {
+                    renderChatMessage('System', data.error || 'Failed to send message.', null);
+                }
+            } catch (error) {
+                renderChatMessage('System', 'Failed to send message.', null);
+            }
+        }
+
+        window.addEventListener('load', () => {
+            loadChatHistory();
+        });
+    </script>
+</body>
+</html>
