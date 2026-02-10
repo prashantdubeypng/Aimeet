@@ -11,13 +11,6 @@
             background: #f5f5f5;
             padding-top: 20px;
         }
-        .navbar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .navbar-brand {
-            font-weight: bold;
-            font-size: 24px;
-        }
         .container-main {
             max-width: 1200px;
             margin: 0 auto;
@@ -154,6 +147,35 @@
             padding: 10px 18px;
             border-radius: 20px;
         }
+        .upload-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .upload-section label {
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .upload-section select,
+        .upload-section input[type="file"] {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .upload-section button {
+            background: #26a69a;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .upload-status {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
         .recording-list {
             list-style: none;
             padding: 0;
@@ -282,6 +304,27 @@
                 </div>
                 {% endif %}
 
+                <div class="upload-section">
+                    <h2 style="margin-bottom:10px;">Upload External Data</h2>
+                    <label for="upload-room">Select a meeting</label>
+                    <select id="upload-room" class="form-control">
+                        {% if all_rooms %}
+                            <option value="" disabled selected>Select meeting</option>
+                            {% for room in all_rooms %}
+                                <option value="{{ room.room_code }}" {% if room.host != user %}disabled{% endif %}>
+                                    {{ room.title }} ({{ room.room_code }}){% if room.host != user %} - Host only{% endif %}
+                                </option>
+                            {% endfor %}
+                        {% else %}
+                            <option value="" disabled selected>No meetings available</option>
+                        {% endif %}
+                    </select>
+                    <label for="dashboard-file">Choose file</label>
+                    <input type="file" id="dashboard-file" class="form-control" accept=".pdf,.txt,.doc,.docx,.mp3" />
+                    <button onclick="uploadFromDashboard()">Upload</button>
+                    <div class="upload-status" id="dashboard-upload-status">Hosts can upload to their meetings. Supports PDF, TXT, DOC/DOCX, MP3.</div>
+                </div>
+
                 <div class="rooms-section">
                     <h2>Available Meetings</h2>
                     {% if all_rooms %}
@@ -314,6 +357,7 @@
                         <div class="toggle-group">
                             <button class="toggle-btn active" id="chat-tab" onclick="showChat()">Chat History</button>
                             <button class="toggle-btn" id="recording-tab" onclick="showRecordings()">Recordings</button>
+                            <button class="toggle-btn" id="ai-tab" onclick="showAi()">AI Q&A</button>
                         </div>
                     </div>
 
@@ -335,6 +379,14 @@
                             </ul>
                         </div>
                     </div>
+
+                    <div id="ai-panel" style="display:none;">
+                        <div class="chat-window" id="ai-window"></div>
+                        <div class="chat-input">
+                            <input type="text" id="ai-input" placeholder="Ask a question about a meeting..." />
+                            <button onclick="askAiQuestion()">Ask</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -353,8 +405,19 @@
         function showRecordings() {
             document.getElementById('chat-panel').style.display = 'none';
             document.getElementById('recording-panel').style.display = 'block';
+            document.getElementById('ai-panel').style.display = 'none';
             document.getElementById('chat-tab').classList.remove('active');
             document.getElementById('recording-tab').classList.add('active');
+            document.getElementById('ai-tab').classList.remove('active');
+        }
+
+        function showAi() {
+            document.getElementById('chat-panel').style.display = 'none';
+            document.getElementById('recording-panel').style.display = 'none';
+            document.getElementById('ai-panel').style.display = 'block';
+            document.getElementById('chat-tab').classList.remove('active');
+            document.getElementById('recording-tab').classList.remove('active');
+            document.getElementById('ai-tab').classList.add('active');
         }
 
         function renderChatMessage(user, content, createdAt) {
@@ -413,6 +476,102 @@
                 }
             } catch (error) {
                 renderChatMessage('System', 'Failed to send message.', null);
+            }
+        }
+
+        function renderAiMessage(user, content) {
+            const aiWindow = document.getElementById('ai-window');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chat-message';
+            wrapper.innerHTML = `
+                <div class="meta">${user}</div>
+                <div class="bubble"></div>
+            `;
+            const bubble = wrapper.querySelector('.bubble');
+            bubble.textContent = content;
+            aiWindow.appendChild(wrapper);
+            aiWindow.scrollTop = aiWindow.scrollHeight;
+            return bubble;
+        }
+
+        async function askAiQuestion() {
+            const input = document.getElementById('ai-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            renderAiMessage('You', text);
+            try {
+                const response = await fetch('/api/query/?stream=true', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': CSRF_TOKEN
+                    },
+                    body: JSON.stringify({ question: text })
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    renderAiMessage('AI', data.error || 'Unable to answer.');
+                    return;
+                }
+
+                if (!response.body) {
+                    const data = await response.json().catch(() => ({}));
+                    renderAiMessage('AI', data.response || 'No response');
+                    return;
+                }
+
+                const bubble = renderAiMessage('AI', '');
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    fullText += decoder.decode(value, { stream: true });
+                    bubble.textContent = fullText;
+                }
+            } catch (error) {
+                renderAiMessage('AI', 'Failed to reach AI service.');
+            }
+        }
+
+        async function uploadFromDashboard() {
+            const roomSelect = document.getElementById('meeting-select');
+            const fileInput = document.getElementById('dashboard-file');
+            const statusEl = document.getElementById('dashboard-upload-status');
+
+            const roomCode = roomSelect.value;
+            if (!roomCode) {
+                statusEl.textContent = 'Please select a meeting.';
+                return;
+            }
+            if (!fileInput.files || fileInput.files.length === 0) {
+                statusEl.textContent = 'Please choose a file to upload.';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('document', fileInput.files[0]);
+
+            try {
+                const response = await fetch(`/meeting/${roomCode}/upload-document/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN
+                    },
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    statusEl.textContent = `Queued: ${data.file_name} (status: ${data.status})`;
+                    fileInput.value = '';
+                } else {
+                    statusEl.textContent = data.error || 'Upload failed.';
+                }
+            } catch (error) {
+                statusEl.textContent = 'Upload failed.';
             }
         }
 

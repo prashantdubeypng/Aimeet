@@ -228,6 +228,202 @@
             border-radius: 20px;
             margin: 0 10px;
         }
+
+        .upload-panel {
+            background: #151a36;
+            padding: 15px 20px;
+            border-top: 1px solid #232a52;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .upload-panel input[type="file"] {
+            color: white;
+        }
+
+        .btn-upload {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-upload:hover {
+            background: #3d8b40;
+        }
+
+        .ai-panel {
+            background: #151a36;
+            padding: 15px 20px;
+            border-top: 1px solid #232a52;
+        }
+
+        .ai-window {
+            background: #0f1530;
+            border: 1px solid #232a52;
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            color: #cbd5ff;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+
+        .ai-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .ai-input input {
+            flex: 1;
+            border-radius: 20px;
+            border: 1px solid #232a52;
+            padding: 8px 12px;
+            background: #0f1530;
+            color: white;
+        }
+
+        .ai-input button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+        }
+
+        .meeting-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 16px;
+            padding: 16px;
+        }
+
+        .meeting-main {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .agenda-panel {
+            background: #111633;
+            border: 1px solid #232a52;
+            border-radius: 12px;
+            padding: 16px;
+            color: #cbd5ff;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 220px);
+        }
+
+        .agenda-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .agenda-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #f2f4ff;
+        }
+
+        .agenda-subtitle {
+            font-size: 12px;
+            color: #8fa0d6;
+        }
+
+        .agenda-refresh {
+            background: #1f2a5b;
+            color: #cbd5ff;
+            border: 1px solid #2c3971;
+            border-radius: 8px;
+            padding: 6px 10px;
+            cursor: pointer;
+        }
+
+        .agenda-list {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            flex: 1;
+            padding-right: 4px;
+        }
+
+        .agenda-item {
+            background: #0f1530;
+            border: 1px solid #232a52;
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+
+        .agenda-badge {
+            min-width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            background: #2c3a7a;
+            color: #dfe6ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .agenda-text {
+            flex: 1;
+            font-size: 13px;
+            color: #d5dcff;
+        }
+
+        .agenda-remove {
+            background: transparent;
+            border: none;
+            color: #8fa0d6;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .agenda-add {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .agenda-add input {
+            flex: 1;
+            border-radius: 10px;
+            border: 1px solid #232a52;
+            padding: 8px 12px;
+            background: #0f1530;
+            color: #f1f4ff;
+        }
+
+        .agenda-add button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 10px;
+        }
+
+        .agenda-empty {
+            color: #8fa0d6;
+            font-size: 13px;
+        }
+
+        @media (max-width: 1100px) {
+            .meeting-layout {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 
 </head>
@@ -244,7 +440,26 @@
         <span class="participant-count" id="participant-count">👥 Participants: 1</span>
     </div>
 
-    <div class="video-container" id="video-container">
+    <div class="meeting-layout">
+        <aside class="agenda-panel">
+            <div class="agenda-header">
+                <div>
+                    <div class="agenda-title">Meeting Agenda</div>
+                    <div class="agenda-subtitle">Based on past meetings and documents</div>
+                </div>
+                <button class="agenda-refresh" onclick="loadAgendaPoints()">Refresh</button>
+            </div>
+            <div class="agenda-list" id="agenda-list">
+                <div class="agenda-empty">Loading agenda...</div>
+            </div>
+            <div class="agenda-add">
+                <input type="text" id="agenda-input" placeholder="Add a new point..." />
+                <button onclick="addAgendaPoint()">Add</button>
+            </div>
+        </aside>
+
+        <div class="meeting-main">
+            <div class="video-container" id="video-container">
         <div class="video-frame">
             <div id="local-video"></div>
             <div class="video-label">You (Local)</div>
@@ -282,9 +497,38 @@
         {% endif %}
     </div>
 
+    {% if is_host %}
+    <div class="upload-panel">
+        <input type="file" id="external-file" accept=".pdf,.txt,.doc,.docx,.mp3" />
+        <button class="control-btn btn-upload" onclick="uploadExternalDocument()">
+            📄 Upload External Data
+        </button>
+        <button class="control-btn" onclick="refreshDocuments()" style="background:#3a4a8f; color:white;">
+            🔄 Refresh Upload Status
+        </button>
+        <span style="color:#cbd5ff; font-size:12px;">Supports PDF, TXT, DOC/DOCX, MP3</span>
+        <a href="{% url 'documents_page' room.room_code %}" style="color:#8fb3ff; font-size:12px;">Open documents page</a>
+    </div>
+    <div class="info-panel" style="border-top:1px solid #232a52;">
+        <div id="documents-status" style="font-size:12px; color:#cbd5ff;">No uploads yet.</div>
+    </div>
+    {% endif %}
+
+    <div class="ai-panel">
+        <div class="ai-window" id="ai-window">Ask questions about this meeting or uploaded documents.</div>
+        <div class="ai-input">
+            <input type="text" id="ai-input" placeholder="Ask AI..." />
+            <button onclick="askMeetingAi()">Ask</button>
+        </div>
+    </div>
+
+        </div>
+    </div>
+
     <script>
         const ROOM_CODE = "{{ room_code }}";
         const ROOM_ID = "{{ room_id }}";
+        const MEETING_ID = "{{ meeting_db_id }}";
         const IS_HOST = document.body.dataset.isHost === "true";
         const CSRF_TOKEN = "{{ csrf_token }}";
         
@@ -659,6 +903,224 @@
             }
         }
 
+        async function uploadExternalDocument() {
+            if (!IS_HOST) {
+                alert("Only the host can upload external data");
+                return;
+            }
+
+            const input = document.getElementById("external-file");
+            if (!input.files || input.files.length === 0) {
+                alert("Please choose a file to upload");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("document", input.files[0]);
+
+            try {
+                const response = await fetch(`/meeting/${ROOM_CODE}/upload-document/`, {
+                    method: "POST",
+                    headers: {
+                        "X-CSRFToken": CSRF_TOKEN,
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    alert(`Uploaded: ${data.file_name}\nStatus: ${data.status}`);
+                    input.value = "";
+                    refreshDocuments();
+                } else {
+                    alert("Upload failed: " + (data.error || "Unknown error"));
+                }
+            } catch (error) {
+                console.error("Upload error:", error);
+                alert("Upload error: " + error.message);
+            }
+        }
+
+        async function refreshDocuments() {
+            try {
+                const response = await fetch(`/api/meetings/${MEETING_ID}/documents/`, {
+                    method: "GET",
+                    headers: {
+                        "X-CSRFToken": CSRF_TOKEN,
+                    }
+                });
+                const data = await response.json();
+                const container = document.getElementById("documents-status");
+
+                if (!response.ok) {
+                    container.textContent = data.error || "Failed to load documents";
+                    return;
+                }
+
+                if (!data.documents || data.documents.length === 0) {
+                    container.textContent = "No uploads yet.";
+                    return;
+                }
+
+                const lines = data.documents.map((doc) => {
+                    const label = `${doc.file_name} (${doc.file_type})`;
+                    const status = doc.status;
+                    const chunks = doc.chunk_count ? `, chunks: ${doc.chunk_count}` : "";
+                    const error = doc.error_message ? ` - ${doc.error_message}` : "";
+                    return `${label}: ${status}${chunks}${error}`;
+                });
+                container.textContent = lines.join(" | ");
+            } catch (error) {
+                console.error("Refresh documents error:", error);
+            }
+        }
+
+        function renderAgendaPoints(points) {
+            const list = document.getElementById('agenda-list');
+            list.innerHTML = '';
+            if (!points || points.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'agenda-empty';
+                empty.textContent = 'No agenda points yet.';
+                list.appendChild(empty);
+                return;
+            }
+
+            points.forEach((point, index) => {
+                const item = document.createElement('div');
+                item.className = 'agenda-item';
+                item.innerHTML = `
+                    <div class="agenda-badge">${index + 1}</div>
+                    <div class="agenda-text"></div>
+                    <button class="agenda-remove" title="Remove">✕</button>
+                `;
+                item.querySelector('.agenda-text').textContent = point.text;
+                item.querySelector('.agenda-remove').addEventListener('click', () => {
+                    removeAgendaPoint(point.id);
+                });
+                list.appendChild(item);
+            });
+        }
+
+        async function loadAgendaPoints() {
+            const list = document.getElementById('agenda-list');
+            list.innerHTML = '<div class="agenda-empty">Loading agenda...</div>';
+            try {
+                const response = await fetch(`/api/meetings/${MEETING_ID}/agenda/`, {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                    }
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    renderAgendaPoints([]);
+                    return;
+                }
+                renderAgendaPoints(data.points || []);
+            } catch (error) {
+                renderAgendaPoints([]);
+            }
+        }
+
+        async function addAgendaPoint() {
+            const input = document.getElementById('agenda-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            try {
+                const response = await fetch(`/api/meetings/${MEETING_ID}/agenda/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ text })
+                });
+                if (response.ok) {
+                    await loadAgendaPoints();
+                }
+            } catch (error) {
+                console.error('Add agenda point failed:', error);
+            }
+        }
+
+        async function removeAgendaPoint(pointId) {
+            try {
+                const response = await fetch(`/api/meetings/${MEETING_ID}/agenda/${pointId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                    }
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    renderAgendaPoints(data.points || []);
+                }
+            } catch (error) {
+                console.error('Remove agenda point failed:', error);
+            }
+        }
+
+        function renderAiMessage(user, content) {
+            const windowEl = document.getElementById('ai-window');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chat-message';
+            wrapper.innerHTML = `
+                <div class="meta">${user}</div>
+                <div class="bubble"></div>
+            `;
+            const bubble = wrapper.querySelector('.bubble');
+            bubble.textContent = content;
+            windowEl.appendChild(wrapper);
+            windowEl.scrollTop = windowEl.scrollHeight;
+            return bubble;
+        }
+
+        async function askMeetingAi() {
+            const input = document.getElementById('ai-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            renderAiMessage('You', text);
+
+            try {
+                const response = await fetch('/api/query/?stream=true', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ question: text })
+                });
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    renderAiMessage('AI', data.error || 'Unable to answer.');
+                    return;
+                }
+
+                if (!response.body) {
+                    const data = await response.json().catch(() => ({}));
+                    renderAiMessage('AI', data.response || 'No response');
+                    return;
+                }
+
+                const bubble = renderAiMessage('AI', '');
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = '';
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    fullText += decoder.decode(value, { stream: true });
+                    bubble.textContent = fullText;
+                }
+            } catch (error) {
+                renderAiMessage('AI', 'Failed to reach AI service.');
+            }
+        }
+
         async function leaveMeeting() {
             // If recording is active and user is host, warn them
             if (IS_HOST && recorder.isRecording) {
@@ -715,6 +1177,7 @@
                     console.error("Failed to join meeting");
                 }
             });
+            loadAgendaPoints();
         });
 
         // Cleanup on page leave

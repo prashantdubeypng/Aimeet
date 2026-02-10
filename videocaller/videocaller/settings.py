@@ -23,12 +23,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-*2s*pfnzfctl9m1%t!ch6@pgmpz*490d@5eu081w&0(5)(5f)z'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
 
-ALLOWED_HOSTS = []
+allowed_hosts = os.environ.get('DJANGO_ALLOWED_HOSTS', '')
+ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
 
 
 # Application definition
@@ -40,8 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    
+    'django_q',
 
     # Your agora app comes here
     'agora'
@@ -76,6 +76,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'videocaller.wsgi.application'
+ASGI_APPLICATION = 'videocaller.asgi.application'
 
 
 # Database
@@ -145,12 +146,33 @@ AGORA_RECORDING_REGION = os.environ.get('AGORA_RECORDING_REGION', 'NA')
 # AssemblyAI Configuration
 ASSEMBLYAI_API_KEY = os.environ.get('ASSEMBLYAI_API_KEY')
 
-# OpenAI Configuration for RAG
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-OPENAI_EMBEDDING_MODEL = os.environ.get('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small')
-OPENAI_EMBEDDING_DIMENSION = int(os.environ.get('OPENAI_EMBEDDING_DIMENSION', 1536))
-OPENAI_LLM_MODEL = os.environ.get('OPENAI_LLM_MODEL', 'gpt-4o-mini')
-OPENAI_MAX_TOKENS = int(os.environ.get('OPENAI_MAX_TOKENS', 1000))
+# Google Gemini Configuration for RAG
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+GOOGLE_EMBEDDING_MODEL = os.environ.get('GOOGLE_EMBEDDING_MODEL', 'models/embedding-001')
+GOOGLE_EMBEDDING_DIMENSION = int(os.environ.get('GOOGLE_EMBEDDING_DIMENSION', 768))
+GOOGLE_LLM_MODEL = os.environ.get('GOOGLE_LLM_MODEL', 'gemini-pro')
+GOOGLE_GENERATE_MODEL = os.environ.get('GOOGLE_GENERATE_MODEL', 'gemini-2.5-flash-lite')
+GOOGLE_CONNECT_TIMEOUT = int(os.environ.get('GOOGLE_CONNECT_TIMEOUT', 10))
+GOOGLE_READ_TIMEOUT = int(os.environ.get('GOOGLE_READ_TIMEOUT', 600))
+GOOGLE_MAX_TOKENS = int(os.environ.get('GOOGLE_MAX_TOKENS', 1000))
+
+# Ollama Configuration for RAG
+def _get_bool_env(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'mistral')
+OLLAMA_CONNECT_TIMEOUT = int(os.environ.get('OLLAMA_CONNECT_TIMEOUT', 10))
+OLLAMA_READ_TIMEOUT = int(os.environ.get('OLLAMA_READ_TIMEOUT', 600))
+OLLAMA_NUM_PREDICT = int(os.environ.get('OLLAMA_NUM_PREDICT', 1024))
+OLLAMA_STREAM = _get_bool_env('OLLAMA_STREAM', True)
+
+# Hugging Face Embeddings
+HF_EMBEDDING_MODEL = os.environ.get('HF_EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
+HF_EMBEDDING_DIMENSION = int(os.environ.get('HF_EMBEDDING_DIMENSION', 384))
 
 # Qdrant Vector Database Configuration
 QDRANT_URL = os.environ.get('QDRANT_URL', 'http://localhost:6333')
@@ -161,3 +183,34 @@ QDRANT_COLLECTION_NAME = os.environ.get('QDRANT_COLLECTION_NAME', 'meeting_trans
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Django-Q configuration
+from urllib.parse import urlparse
+
+redis_url = os.environ.get('REDIS_URL')
+redis_config = None
+if redis_url:
+    parsed = urlparse(redis_url)
+    redis_config = {
+        'host': parsed.hostname,
+        'port': parsed.port or 6379,
+        'db': int((parsed.path or '/0').lstrip('/') or 0),
+        'password': parsed.password,
+        'ssl': parsed.scheme == 'rediss'
+    }
+
+Q_CLUSTER = {
+    'name': 'videocaller',
+    'workers': 2,
+    'recycle': 500,
+    'timeout': 1200,
+    'retry': 1300,
+    'queue_limit': 50,
+    'bulk': 5,
+    'orm': 'default',
+    'redis': redis_config or {
+        'host': os.environ.get('REDIS_HOST', '127.0.0.1'),
+        'port': int(os.environ.get('REDIS_PORT', 6379)),
+        'db': int(os.environ.get('REDIS_DB', 0)),
+    }
+}

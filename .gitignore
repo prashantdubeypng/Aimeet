@@ -22,6 +22,10 @@ env/
 
 # Logs
 *.log
+*.webm
+# Media uploads
+*.pdf
+*.mp3
 
 # OS files
 .DS_Store

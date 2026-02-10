@@ -1,29 +1,41 @@
-"""OpenAI embeddings and Qdrant vector DB management"""
-import os
-import json
+"""LangChain embeddings and Qdrant vector DB management"""
 import logging
-from typing import List, Dict, Tuple
+import uuid
+from typing import List, Dict
 from django.conf import settings
-from openai import OpenAI
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
-import re
+from qdrant_client.models import Distance, VectorParams, Filter, FieldCondition, MatchValue, PayloadSchemaType
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_qdrant import QdrantVectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
 
-# Initialize clients
-openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
 qdrant_client = QdrantClient(url=settings.QDRANT_URL, api_key=getattr(settings, 'QDRANT_API_KEY', None))
 
-EMBEDDING_MODEL = getattr(settings, 'OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small')
-EMBEDDING_DIMENSION = getattr(settings, 'OPENAI_EMBEDDING_DIMENSION', 1536)
+EMBEDDING_MODEL = getattr(settings, 'HF_EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
+EMBEDDING_DIMENSION = int(getattr(settings, 'HF_EMBEDDING_DIMENSION', 384))
 COLLECTION_NAME = getattr(settings, 'QDRANT_COLLECTION_NAME', 'meeting_transcripts')
+embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
 
 
 def ensure_collection_exists():
     """Create Qdrant collection if it doesn't exist"""
     try:
-        qdrant_client.get_collection(COLLECTION_NAME)
+        collection = qdrant_client.get_collection(COLLECTION_NAME)
+        existing_size = collection.config.params.vectors.size
+        if existing_size != EMBEDDING_DIMENSION:
+            logger.warning(
+                "Qdrant collection size mismatch (%s != %s), recreating: %s",
+                existing_size,
+                EMBEDDING_DIMENSION,
+                COLLECTION_NAME
+            )
+            qdrant_client.delete_collection(COLLECTION_NAME)
+            qdrant_client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=VectorParams(size=EMBEDDING_DIMENSION, distance=Distance.COSINE),
+            )
     except Exception:
         logger.info(f"Creating Qdrant collection: {COLLECTION_NAME}")
         qdrant_client.create_collection(
@@ -31,10 +43,24 @@ def ensure_collection_exists():
             vectors_config=VectorParams(size=EMBEDDING_DIMENSION, distance=Distance.COSINE),
         )
 
+    ensure_payload_indexes()
+
+
+def ensure_payload_indexes() -> None:
+    """Ensure payload indexes exist for filtered searches."""
+    try:
+        qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="meeting_id",
+            field_schema=PayloadSchemaType.INTEGER,
+        )
+    except Exception as e:
+        logger.info("Skipping payload index creation for meeting_id: %s", str(e))
+
 
 def chunk_transcript(transcript_text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
     """
-    Split transcript into overlapping chunks using recursive character splitting
+    Split transcript into overlapping chunks using RecursiveCharacterTextSplitter
     
     Args:
         transcript_text: Full transcript text
@@ -44,82 +70,22 @@ def chunk_transcript(transcript_text: str, chunk_size: int = 500, overlap: int =
     Returns:
         List of text chunks
     """
-    # Simple recursive character splitting (approximates token count)
-    # Typically 1 token ≈ 4 characters
-    char_chunk_size = chunk_size * 4
-    char_overlap = overlap * 4
-    
-    chunks = []
-    
-    # Split by sentences first for better coherence
-    sentences = re.split(r'(?<=[.!?])\s+', transcript_text)
-    
-    current_chunk = ""
-    for sentence in sentences:
-        if len(current_chunk) + len(sentence) < char_chunk_size:
-            current_chunk += (sentence + " " if current_chunk else sentence + " ")
-        else:
-            if current_chunk:
-                chunks.append(current_chunk.strip())
-            # Overlap with previous chunk
-            if chunks and len(current_chunk) > char_overlap:
-                current_chunk = current_chunk[-char_overlap:] + sentence + " "
-            else:
-                current_chunk = sentence + " "
-    
-    if current_chunk.strip():
-        chunks.append(current_chunk.strip())
-    
-    return chunks
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=overlap,
+        separators=["\n\n", "\n", ". ", " ", ""]
+    )
+    logger.info(splitter.split_text(transcript_text))
+    return splitter.split_text(transcript_text)
 
 
-def get_embedding(text: str) -> List[float]:
-    """
-    Generate embedding for text using OpenAI API
-    
-    Args:
-        text: Text to embed
-    
-    Returns:
-        List of floats representing the embedding vector
-    """
-    try:
-        response = openai_client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=text
-        )
-        embedding = response.data[0].embedding
-        
-        # Ensure consistent dimension
-        if len(embedding) != EMBEDDING_DIMENSION:
-            logger.warning(f"Embedding dimension mismatch: {len(embedding)} vs {EMBEDDING_DIMENSION}")
-        
-        return embedding
-    except Exception as e:
-        logger.error(f"Error generating embedding: {str(e)}")
-        raise
-
-
-def get_batch_embeddings(texts: List[str]) -> List[List[float]]:
-    """
-    Generate embeddings for multiple texts in a batch (more efficient)
-    
-    Args:
-        texts: List of texts to embed
-    
-    Returns:
-        List of embedding vectors
-    """
-    try:
-        response = openai_client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=texts
-        )
-        embeddings = [item.embedding for item in response.data]
-        return embeddings
-    except Exception as e:
-        logger.error(f"Error generating batch embeddings: {str(e)}")
-        raise
+def get_vectorstore() -> QdrantVectorStore:
+    ensure_collection_exists()
+    return QdrantVectorStore(
+        client=qdrant_client,
+        collection_name=COLLECTION_NAME,
+        embedding=embeddings,
+    )
 
 
 def store_chunks_in_vector_db(
@@ -141,55 +107,87 @@ def store_chunks_in_vector_db(
     ensure_collection_exists()
     
     try:
-        # Get embeddings in batch (more efficient)
-        embeddings = get_batch_embeddings(chunks)
-        
-        # Create points for Qdrant
-        points = []
-        vector_ids = []
-        
-        for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-            vector_id = f"meeting_{meeting_id}_chunk_{idx}"
-            vector_ids.append(vector_id)
-            
-            # Store metadata as JSON
+        from .models import MeetingRoom
+
+        vectorstore = get_vectorstore()
+        meeting_title = MeetingRoom.objects.filter(id=meeting_id).values_list("title", flat=True).first() or ""
+        vector_ids = [str(uuid.uuid5(uuid.NAMESPACE_URL, f"meeting:{meeting_id}:{idx}")) for idx in range(len(chunks))]
+
+        metadatas = []
+        logger.info("inside the store_chunk_in_vector")
+        logger.info(chunks)
+        for idx, chunk in enumerate(chunks):
             payload = {
                 "meeting_id": meeting_id,
+                "meeting_title": meeting_title,
                 "chunk_index": idx,
-                "text": chunk[:512],  # Truncate for storage
-                "chunk_length": len(chunk)
+                "text": chunk[:512],
+                "chunk_length": len(chunk),
+                "source_type": "meeting_transcript"
             }
-            
+
             if chunk_objects and idx < len(chunk_objects):
                 payload["chunk_db_id"] = chunk_objects[idx].id
                 if chunk_objects[idx].start_time:
                     payload["start_time"] = chunk_objects[idx].start_time
                 if chunk_objects[idx].end_time:
                     payload["end_time"] = chunk_objects[idx].end_time
-            
-            points.append(
-                PointStruct(
-                    id=hash(vector_id) % (2**31),  # Convert string to integer ID
-                    vector=embedding,
-                    payload=payload
-                )
-            )
-        
-        # Upsert points to Qdrant
-        qdrant_client.upsert(
-            collection_name=COLLECTION_NAME,
-            points=points
-        )
-        
+
+            metadatas.append(payload)
+
+        vectorstore.add_texts(texts=chunks, metadatas=metadatas, ids=vector_ids)
         logger.info(f"Stored {len(chunks)} chunks for meeting {meeting_id}")
         return vector_ids
-    
     except Exception as e:
         logger.error(f"Error storing chunks in vector DB: {str(e)}")
         raise
 
 
-def search_similar_chunks(query: str, meeting_id: int, top_k: int = 5) -> List[Dict]:
+def store_document_chunks_in_vector_db(
+    meeting_id: int,
+    document,
+    chunks: List[str],
+    chunk_objects: List = None
+) -> List[str]:
+    """Store document chunks and their embeddings in Qdrant"""
+    ensure_collection_exists()
+
+    try:
+        from .models import MeetingRoom
+
+        vectorstore = get_vectorstore()
+        meeting_title = MeetingRoom.objects.filter(id=meeting_id).values_list("title", flat=True).first() or ""
+        vector_ids = [str(uuid.uuid5(uuid.NAMESPACE_URL, f"document:{document.id}:{idx}")) for idx in range(len(chunks))]
+
+        metadatas = []
+        logger.info(chunks)
+        for idx, chunk in enumerate(chunks):
+            payload = {
+                "meeting_id": meeting_id,
+                "meeting_title": meeting_title,
+                "document_id": document.id,
+                "document_name": document.file_name,
+                "chunk_index": idx,
+                "text": chunk[:512],
+                "chunk_length": len(chunk),
+                "source_type": "document"
+            }
+
+            if chunk_objects and idx < len(chunk_objects):
+                payload["chunk_db_id"] = chunk_objects[idx].id
+                payload["block_type"] = chunk_objects[idx].block_type
+
+            metadatas.append(payload)
+
+        vectorstore.add_texts(texts=chunks, metadatas=metadatas, ids=vector_ids)
+        logger.info(f"Stored {len(chunks)} document chunks for meeting {meeting_id}")
+        return vector_ids
+    except Exception as e:
+        logger.error(f"Error storing document chunks in vector DB: {str(e)}")
+        raise
+
+
+def search_similar_chunks(query: str, meeting_id: int | None = None, top_k: int = 5) -> List[Dict]:
     """
     Search for chunks similar to query using vector similarity
     
@@ -202,37 +200,31 @@ def search_similar_chunks(query: str, meeting_id: int, top_k: int = 5) -> List[D
         List of dicts with chunk text, score, and metadata
     """
     try:
-        # Get query embedding
-        query_embedding = get_embedding(query)
-        
-        # Search in Qdrant
-        results = qdrant_client.search(
-            collection_name=COLLECTION_NAME,
-            query_vector=query_embedding,
-            query_filter={
-                "must": [
-                    {
-                        "key": "meeting_id",
-                        "match": {"value": meeting_id}
-                    }
-                ]
-            },
-            limit=top_k,
-            with_payload=True
-        )
-        
-        # Format results
+        print("trying to search the similiar to the query asked")
+        vectorstore = get_vectorstore()
+        filter_ = None
+        if meeting_id is not None:
+            filter_ = Filter(
+                must=[FieldCondition(key="meeting_id", match=MatchValue(value=meeting_id))]
+            )
+
+        results = vectorstore.similarity_search_with_score(query, k=top_k, filter=filter_)
         formatted_results = []
-        for result in results:
+        for doc, score in results:
+            metadata = doc.metadata or {}
             formatted_results.append({
-                "text": result.payload.get("text", ""),
-                "score": result.score,
-                "chunk_index": result.payload.get("chunk_index", 0),
-                "start_time": result.payload.get("start_time"),
-                "end_time": result.payload.get("end_time"),
-                "metadata": result.payload
+                "text": doc.page_content,
+                "score": score,
+                "chunk_index": metadata.get("chunk_index", 0),
+                "start_time": metadata.get("start_time"),
+                "end_time": metadata.get("end_time"),
+                "source_type": metadata.get("source_type", "meeting_transcript"),
+                "meeting_title": metadata.get("meeting_title"),
+                "document_id": metadata.get("document_id"),
+                "document_name": metadata.get("document_name"),
+                "metadata": metadata
             })
-        
+
         return formatted_results
     
     except Exception as e:

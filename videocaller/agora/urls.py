@@ -17,6 +17,8 @@ urlpatterns = [
     path('meeting/<str:room_code>/', views.meeting, name='meeting'),
     path('meeting/<str:room_code>/end/', views.end_meeting, name='end_meeting'),
     path('meeting/<str:room_code>/upload-recording/', views.upload_recording, name='upload_recording'),
+    path('meeting/<str:room_code>/upload-document/', views.upload_document, name='upload_document'),
+    path('meeting/<str:room_code>/documents/', views.documents_page, name='documents_page'),
     
     # Cloud Recording Endpoints
     path('meeting/<str:room_code>/start-recording/', views.start_recording, name='start_recording'),
@@ -31,5 +33,9 @@ urlpatterns = [
     # RAG Endpoints
     path('api/meetings/<int:meeting_id>/prepare-rag/', views.prepare_meeting_for_rag, name='prepare_rag'),
     path('api/meetings/<int:meeting_id>/query/', views.query_meeting_transcript, name='query_transcript'),
+    path('api/query/', views.query_global_rag, name='query_global_rag'),
     path('api/meetings/<int:meeting_id>/conversation-history/', views.get_conversation_history, name='conversation_history'),
+    path('api/meetings/<int:meeting_id>/documents/', views.list_documents, name='list_documents'),
+    path('api/meetings/<int:meeting_id>/agenda/', views.meeting_agenda, name='meeting_agenda'),
+    path('api/meetings/<int:meeting_id>/agenda/<int:point_id>/', views.delete_agenda_point, name='delete_agenda_point'),
 ]

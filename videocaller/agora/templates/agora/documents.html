@@ -1,0 +1,105 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documents - {{ room.title }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            background: #0a0e27;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .header {
+            padding: 20px;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card {
+            background: #151a36;
+            border: 1px solid #232a52;
+        }
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            background: #3a4a8f;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h4 style="margin:0;">Documents - {{ room.title }}</h4>
+            <small>Meeting code: {{ room.room_code }}</small>
+        </div>
+        <div>
+            <a class="btn btn-sm btn-secondary" href="{% url 'meeting' room.room_code %}">Back to meeting</a>
+            <button class="btn btn-sm btn-primary" onclick="refreshDocuments()">Refresh</button>
+        </div>
+    </div>
+
+    <div class="container mt-4">
+        <div id="documents-list" class="row"></div>
+    </div>
+
+    <script>
+        const MEETING_ID = "{{ meeting_db_id }}";
+        const CSRF_TOKEN = "{{ csrf_token }}";
+
+        function renderDocuments(docs) {
+            const container = document.getElementById("documents-list");
+            container.innerHTML = "";
+            if (!docs || docs.length === 0) {
+                container.innerHTML = '<div class="col-12"><div class="card p-3">No documents uploaded yet.</div></div>';
+                return;
+            }
+
+            docs.forEach((doc) => {
+                const col = document.createElement("div");
+                col.className = "col-md-6 mb-3";
+                const error = doc.error_message ? `<div style="color:#ff9f9f;">${doc.error_message}</div>` : "";
+                const s3 = doc.s3_url ? `<a href="${doc.s3_url}" target="_blank">S3 link</a>` : "";
+                const chunks = doc.chunk_count ? `<div style="font-size:12px; color:#cbd5ff;">Chunks: ${doc.chunk_count}</div>` : "";
+
+                col.innerHTML = `
+                    <div class="card p-3">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>${doc.file_name} (${doc.file_type})</div>
+                            <div class="status-badge">${doc.status}</div>
+                        </div>
+                        <div style="font-size:12px; color:#cbd5ff; margin-top:6px;">
+                            Uploaded: ${doc.created_at}
+                        </div>
+                        ${chunks}
+                        ${error}
+                        <div style="font-size:12px; margin-top:6px;">${s3}</div>
+                    </div>
+                `;
+                container.appendChild(col);
+            });
+        }
+
+        async function refreshDocuments() {
+            const response = await fetch(`/api/meetings/${MEETING_ID}/documents/`, {
+                method: "GET",
+                headers: {
+                    "X-CSRFToken": CSRF_TOKEN,
+                }
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                renderDocuments(data.documents);
+            } else {
+                renderDocuments([]);
+                alert(data.error || "Failed to load documents");
+            }
+        }
+    </script>
+</body>
+</html>
