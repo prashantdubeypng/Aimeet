@@ -3,6 +3,8 @@ import time
 import json
 import random
 import string
+import logging
+import requests
 
 from django.http.response import JsonResponse
 from django.http import StreamingHttpResponse, HttpResponseNotAllowed
@@ -25,6 +27,8 @@ from .agenda_utils import generate_agenda_points
 from asgiref.sync import sync_to_async
 from django_q.tasks import async_task
 from pusher import Pusher
+
+logger = logging.getLogger(__name__)
 
 
 # Instantiate a Pusher Client
@@ -807,6 +811,91 @@ async def query_global_rag(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required(login_url='/register/')
+@require_http_methods(["GET"])
+def google_llm_health(request):
+    """
+    Health-check for Google LLM configuration.
+    GET /api/health/google/
+    """
+    if not settings.GOOGLE_API_KEY:
+        return JsonResponse({'ok': False, 'error': 'GOOGLE_API_KEY is not configured'}, status=503)
+
+    model_name = settings.GOOGLE_GENERATE_MODEL
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model_name}:generateContent?key={settings.GOOGLE_API_KEY}"
+    )
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": "Reply with OK"}]
+            }
+        ],
+        "generationConfig": {
+            "maxOutputTokens": 8,
+            "temperature": 0.0
+        }
+    }
+
+    started = time.time()
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=(settings.GOOGLE_CONNECT_TIMEOUT, settings.GOOGLE_READ_TIMEOUT)
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        text_parts = []
+        for candidate in data.get("candidates", []):
+            for part in candidate.get("content", {}).get("parts", []):
+                part_text = part.get("text")
+                if part_text:
+                    text_parts.append(part_text)
+
+        output = "".join(text_parts).strip()
+        latency_ms = int((time.time() - started) * 1000)
+        return JsonResponse({
+            'ok': True,
+            'model': model_name,
+            'latency_ms': latency_ms,
+            'output': output
+        })
+    except requests.exceptions.ReadTimeout as e:
+        logger.error("Google health-check timed out: %s", str(e))
+        return JsonResponse({
+            'ok': False,
+            'model': model_name,
+            'error': 'Google request timed out'
+        }, status=503)
+    except requests.exceptions.RequestException as e:
+        status = getattr(e.response, "status_code", None)
+        body = getattr(e.response, "text", "")
+        logger.error("Google health-check failed (status=%s): %s", status, body[:1000])
+        return JsonResponse({
+            'ok': False,
+            'model': model_name,
+            'error': 'Google request failed'
+        }, status=503)
+    except ValueError as e:
+        logger.error("Google health-check invalid JSON response: %s", str(e))
+        return JsonResponse({
+            'ok': False,
+            'model': model_name,
+            'error': 'Invalid JSON response from Google'
+        }, status=503)
+    except Exception as e:
+        logger.error("Google health-check unexpected error: %s", str(e))
+        return JsonResponse({
+            'ok': False,
+            'model': model_name,
+            'error': str(e)
+        }, status=503)
 
 
 @login_required

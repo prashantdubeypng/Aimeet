@@ -38,4 +38,5 @@ urlpatterns = [
     path('api/meetings/<int:meeting_id>/documents/', views.list_documents, name='list_documents'),
     path('api/meetings/<int:meeting_id>/agenda/', views.meeting_agenda, name='meeting_agenda'),
     path('api/meetings/<int:meeting_id>/agenda/<int:point_id>/', views.delete_agenda_point, name='delete_agenda_point'),
+    path('api/health/google/', views.google_llm_health, name='google_llm_health'),
 ]

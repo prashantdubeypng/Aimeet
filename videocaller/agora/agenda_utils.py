@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 GOOGLE_API_KEY = getattr(settings, 'GOOGLE_API_KEY', '')
 GOOGLE_GENERATE_MODEL = getattr(settings, 'GOOGLE_GENERATE_MODEL', 'gemini-2.5-flash-lite')
+GOOGLE_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
 GOOGLE_CONNECT_TIMEOUT = getattr(settings, 'GOOGLE_CONNECT_TIMEOUT', 10)
 GOOGLE_READ_TIMEOUT = getattr(settings, 'GOOGLE_READ_TIMEOUT', 600)
 
@@ -17,10 +18,7 @@ def _google_generate(prompt: str) -> str:
     if not GOOGLE_API_KEY:
         raise ValueError("GOOGLE_API_KEY is not configured")
 
-    url = (
-        "https://aiplatform.googleapis.com/v1/publishers/google/models/"
-        f"{GOOGLE_GENERATE_MODEL}:streamGenerateContent?key={GOOGLE_API_KEY}"
-    )
+    url = f"{GOOGLE_API_BASE}{GOOGLE_GENERATE_MODEL}:generateContent?key={GOOGLE_API_KEY}"
     payload = {
         "contents": [
             {
@@ -40,12 +38,11 @@ def _google_generate(prompt: str) -> str:
     data = response.json()
 
     text_parts: List[str] = []
-    for item in data:
-        for candidate in item.get("candidates", []):
-            for part in candidate.get("content", {}).get("parts", []):
-                part_text = part.get("text")
-                if part_text:
-                    text_parts.append(part_text)
+    for candidate in data.get("candidates", []):
+        for part in candidate.get("content", {}).get("parts", []):
+            part_text = part.get("text")
+            if part_text:
+                text_parts.append(part_text)
     return "".join(text_parts).strip()
 
 

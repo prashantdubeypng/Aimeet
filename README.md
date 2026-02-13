@@ -73,12 +73,13 @@ This project is built with Django and integrates real-time video, cloud storage,
 - PostgreSQL for persistent data
 - AWS S3 for recordings and documents
 
-**Real-Time & Video**
+- Powered by HuggingFace embeddings and Ollama LLM
 - Agora RTC SDK v4.24.2 for video/audio
-- Pusher for real-time chat
-
-**AI & Search**
-- OpenAI text-embedding-3-small (1536-dimensional vectors)
+**Meeting Agenda (Sticky Notes)**
+- Left-side agenda panel auto-generates discussion points from past transcripts and documents
+- Points are grounded in your stored data only
+- Add or remove points to customize the agenda
+- Helps you prepare with context from meeting history
 - OpenAI GPT-4o for intelligent responses
 - AssemblyAI for speech-to-text transcription
 - Qdrant Cloud for vector database

@@ -12,54 +12,89 @@ from .models import ConversationHistory
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = getattr(settings, 'OLLAMA_URL', 'http://localhost:11434')
-OLLAMA_MODEL = getattr(settings, 'OLLAMA_MODEL', 'mistral')
-OLLAMA_CONNECT_TIMEOUT = getattr(settings, 'OLLAMA_CONNECT_TIMEOUT', 10)
-OLLAMA_READ_TIMEOUT = getattr(settings, 'OLLAMA_READ_TIMEOUT', 600)
-OLLAMA_NUM_PREDICT = getattr(settings, 'OLLAMA_NUM_PREDICT', 1024)
+GOOGLE_API_KEY = getattr(settings, 'GOOGLE_API_KEY', '')
+GOOGLE_GENERATE_MODEL = getattr(settings, 'GOOGLE_GENERATE_MODEL', 'gemini-2.5-flash-lite')
+GOOGLE_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
+GOOGLE_CONNECT_TIMEOUT = getattr(settings, 'GOOGLE_CONNECT_TIMEOUT', 10)
+GOOGLE_READ_TIMEOUT = getattr(settings, 'GOOGLE_READ_TIMEOUT', 600)
 MAX_TOKENS = getattr(settings, 'GOOGLE_MAX_TOKENS', 1000)
 MAX_CONVERSATION_TURNS = 5  # Limit context window
 
 
-def _build_ollama_messages(system_prompt: str, conversation_context: List[Dict], query: str) -> List[Dict]:
-    messages = [{"role": "system", "content": system_prompt}]
-    for item in conversation_context:
-        role = "assistant" if item["role"] == "assistant" else "user"
-        messages.append({"role": role, "content": item["content"]})
-    messages.append({"role": "user", "content": query})
-    return messages
+def _build_google_prompt(system_prompt: str, conversation_context: List[Dict], query: str) -> str:
+    parts: List[str] = ["SYSTEM:", system_prompt.strip()]
+    if conversation_context:
+        parts.append("\nCONVERSATION:")
+        for item in conversation_context:
+            role = "ASSISTANT" if item["role"] == "assistant" else "USER"
+            parts.append(f"{role}: {item['content'].strip()}")
+    parts.append("\nUSER QUESTION:")
+    parts.append(query.strip())
+    parts.append("\nASSISTANT:")
+    return "\n".join(parts)
 
 
-def _ollama_chat(messages: List[Dict]) -> str:
-    url = f"{OLLAMA_URL.rstrip('/')}/api/chat"
+def _google_generate(prompt: str) -> str:
+    if not GOOGLE_API_KEY:
+        raise ValueError("GOOGLE_API_KEY is not configured")
+
+    url = f"{GOOGLE_API_BASE}{GOOGLE_GENERATE_MODEL}:generateContent?key={GOOGLE_API_KEY}"
     payload = {
-        "model": OLLAMA_MODEL,
-        "messages": messages,
-        "stream": False,
-        "options": {
-            "temperature": 0.7,
-            "num_predict": OLLAMA_NUM_PREDICT
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}]
+            }
+        ],
+        "generationConfig": {
+            "maxOutputTokens": MAX_TOKENS,
+            "temperature": 0.7
         }
     }
-    response = requests.post(
-        url,
-        json=payload,
-        timeout=(OLLAMA_CONNECT_TIMEOUT, OLLAMA_READ_TIMEOUT)
-    )
-    response.raise_for_status()
-    data = response.json()
-    return data.get("message", {}).get("content", "")
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=(GOOGLE_CONNECT_TIMEOUT, GOOGLE_READ_TIMEOUT)
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.ReadTimeout as e:
+        logger.error("Google generate timed out: %s", str(e))
+        raise
+    except requests.exceptions.RequestException as e:
+        status = getattr(e.response, "status_code", None)
+        body = getattr(e.response, "text", "")
+        logger.error("Google generate request failed (status=%s): %s", status, body[:1000])
+        raise
+    except ValueError as e:
+        logger.error("Google generate invalid JSON response: %s", str(e))
+        raise
+
+    text_parts: List[str] = []
+    for candidate in data.get("candidates", []):
+        for part in candidate.get("content", {}).get("parts", []):
+            part_text = part.get("text")
+            if part_text:
+                text_parts.append(part_text)
+    return "".join(text_parts).strip()
 
 
-def _ollama_chat_stream(messages: List[Dict]) -> Iterable[str]:
-    url = f"{OLLAMA_URL.rstrip('/')}/api/chat"
+def _google_generate_stream(prompt: str) -> Iterable[str]:
+    if not GOOGLE_API_KEY:
+        raise ValueError("GOOGLE_API_KEY is not configured")
+
+    url = f"{GOOGLE_API_BASE}{GOOGLE_GENERATE_MODEL}:streamGenerateContent?key={GOOGLE_API_KEY}"
     payload = {
-        "model": OLLAMA_MODEL,
-        "messages": messages,
-        "stream": True,
-        "options": {
-            "temperature": 0.7,
-            "num_predict": OLLAMA_NUM_PREDICT
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}]
+            }
+        ],
+        "generationConfig": {
+            "maxOutputTokens": MAX_TOKENS,
+            "temperature": 0.7
         }
     }
     try:
@@ -67,22 +102,47 @@ def _ollama_chat_stream(messages: List[Dict]) -> Iterable[str]:
             url,
             json=payload,
             stream=True,
-            timeout=(OLLAMA_CONNECT_TIMEOUT, OLLAMA_READ_TIMEOUT)
+            timeout=(GOOGLE_CONNECT_TIMEOUT, GOOGLE_READ_TIMEOUT)
         ) as response:
             response.raise_for_status()
+            buffered_lines: List[str] = []
             for line in response.iter_lines(decode_unicode=True):
                 if not line:
                     continue
-                data = json.loads(line)
-                message = data.get("message", {})
-                content = message.get("content")
-                if content:
-                    yield content
-                if data.get("done"):
-                    break
-    except requests.exceptions.ReadTimeout:
+                try:
+                    data = json.loads(line)
+                    for candidate in data.get("candidates", []):
+                        for part in candidate.get("content", {}).get("parts", []):
+                            part_text = part.get("text")
+                            if part_text:
+                                yield part_text
+                    continue
+                except json.JSONDecodeError:
+                    buffered_lines.append(line)
+
+            if buffered_lines:
+                buffered_payload = "\n".join(buffered_lines).strip()
+                try:
+                    data = json.loads(buffered_payload)
+                    if isinstance(data, list):
+                        items = data
+                    else:
+                        items = [data]
+                    for item in items:
+                        for candidate in item.get("candidates", []):
+                            for part in candidate.get("content", {}).get("parts", []):
+                                part_text = part.get("text")
+                                if part_text:
+                                    yield part_text
+                except json.JSONDecodeError:
+                    logger.warning("Google stream buffered payload was not JSON")
+    except requests.exceptions.ReadTimeout as e:
+        logger.error("Google stream timed out: %s", str(e))
         yield "\n[Model timed out. Try again.]"
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as e:
+        status = getattr(e.response, "status_code", None)
+        body = getattr(e.response, "text", "")
+        logger.error("Google stream request failed (status=%s): %s", status, body[:1000])
         yield "\n[Model error. Please try again.]"
 
 
@@ -194,11 +254,11 @@ RELEVANT TRANSCRIPT SECTIONS:
 
 Answer the user's question based ONLY on the provided transcript sections. Be specific and cite which part of the transcript you're referring to when possible."""
         
-        # Step 4: Build messages for Ollama
-        messages = _build_ollama_messages(system_prompt, conversation_context, query)
+        # Step 4: Build prompt for Google
+        prompt = _build_google_prompt(system_prompt, conversation_context, query)
 
-        # Step 5: Call Ollama
-        assistant_response = _ollama_chat(messages)
+        # Step 5: Call Google
+        assistant_response = _google_generate(prompt)
 
         # Step 6: Save conversation turn (for next context)
         _save_conversation_turn(meeting_id, user_id, query, assistant_response, relevant_chunks)
@@ -239,12 +299,12 @@ RELEVANT TRANSCRIPT SECTIONS:
 
 Answer the user's question based ONLY on the provided transcript sections. Be specific and cite which part of the transcript you're referring to when possible."""
 
-        messages = _build_ollama_messages(system_prompt, conversation_context, query)
+        prompt = _build_google_prompt(system_prompt, conversation_context, query)
 
         def generator() -> Iterable[str]:
             yield "Thinking...\n"
             parts: List[str] = []
-            for token in _ollama_chat_stream(messages):
+            for token in _google_generate_stream(prompt):
                 parts.append(token)
                 yield token
             assistant_response = "".join(parts)
@@ -285,13 +345,13 @@ RELEVANT TRANSCRIPT SECTIONS:
 
 Answer the user's question based ONLY on the provided transcript sections. Be specific and cite which part of the transcript you're referring to when possible."""
 
-        messages = _build_ollama_messages(system_prompt, conversation_context, query)
+        prompt = _build_google_prompt(system_prompt, conversation_context, query)
         token_queue: queue.Queue = queue.Queue()
         stop_marker = object()
 
         def worker():
             try:
-                for token in _ollama_chat_stream(messages):
+                for token in _google_generate_stream(prompt):
                     token_queue.put(token)
             except Exception:
                 token_queue.put("\n[Model error. Please try again.]")
