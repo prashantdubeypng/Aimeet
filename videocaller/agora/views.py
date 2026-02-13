@@ -30,14 +30,27 @@ from pusher import Pusher
 
 logger = logging.getLogger(__name__)
 
+# Lazy-load Pusher client to avoid crashes when env vars aren't set (e.g., in CI)
+_pusher_client = None
 
-# Instantiate a Pusher Client
-pusher_client = Pusher(app_id=(os.environ.get('PUSHER_APP_ID')),
-                       key=os.environ.get('PUSHER_KEY'),
-                       secret=os.environ.get('PUSHER_SECRET'),
-                       ssl=True,
-                       cluster=os.environ.get('PUSHER_CLUSTER')
-                       )
+def get_pusher_client():
+    global _pusher_client
+    if _pusher_client is None:
+        app_id = os.environ.get('PUSHER_APP_ID')
+        key = os.environ.get('PUSHER_KEY')
+        secret = os.environ.get('PUSHER_SECRET')
+        cluster = os.environ.get('PUSHER_CLUSTER')
+        
+        # Only initialize if all required env vars are present
+        if all([app_id, key, secret, cluster]):
+            _pusher_client = Pusher(
+                app_id=app_id,
+                key=key,
+                secret=secret,
+                ssl=True,
+                cluster=cluster
+            )
+    return _pusher_client
 
 
 def generate_room_code():
@@ -152,7 +165,11 @@ def end_meeting(request, room_code):
 
 # Pusher Authentication
 def pusher_auth(request):
-    payload = pusher_client.authenticate(
+    client = get_pusher_client()
+    if not client:
+        return JsonResponse({'error': 'Pusher not configured'}, status=503)
+    
+    payload = client.authenticate(
         channel=request.POST['channel_name'],
         socket_id=request.POST['socket_id'],
         custom_data={

@@ -75,6 +75,10 @@ jobs:
         REDIS_URL: redis://localhost:6379/0
         DJANGO_SECRET_KEY: test-secret-key-for-ci
         DJANGO_DEBUG: 'true'
+        PUSHER_APP_ID: 'test-app-id'
+        PUSHER_KEY: 'test-key'
+        PUSHER_SECRET: 'test-secret'
+        PUSHER_CLUSTER: 'test-cluster'
       run: |
         cd videocaller
         python manage.py migrate --no-input
@@ -85,6 +89,10 @@ jobs:
         REDIS_URL: redis://localhost:6379/0
         DJANGO_SECRET_KEY: test-secret-key-for-ci
         DJANGO_DEBUG: 'true'
+        PUSHER_APP_ID: 'test-app-id'
+        PUSHER_KEY: 'test-key'
+        PUSHER_SECRET: 'test-secret'
+        PUSHER_CLUSTER: 'test-cluster'
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         QDRANT_URL: ${{ secrets.QDRANT_URL }}
         QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
@@ -97,6 +105,10 @@ jobs:
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
         DJANGO_SECRET_KEY: test-secret-key-for-ci
+        PUSHER_APP_ID: 'test-app-id'
+        PUSHER_KEY: 'test-key'
+        PUSHER_SECRET: 'test-secret'
+        PUSHER_CLUSTER: 'test-cluster'
       run: |
         cd videocaller
         python manage.py makemigrations --check --dry-run --no-input
