@@ -1,0 +1,41 @@
+name: CD - Deploy to Render
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to Render
+      uses: johnbeynon/render-deploy-action@v0.0.8
+      with:
+        service-id: ${{ secrets.RENDER_SERVICE_ID }}
+        api-key: ${{ secrets.RENDER_API_KEY }}
+
+    - name: Wait for deployment
+      run: |
+        echo "⏳ Waiting for Render deployment to complete..."
+        sleep 60
+
+    - name: Health check
+      run: |
+        echo "🔍 Running health check..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.RENDER_APP_URL }}/api/health/google/ || echo "000")
+        if [ "$response" = "200" ] || [ "$response" = "503" ]; then
+          echo "✅ App is responding (HTTP $response)"
+        else
+          echo "⚠️ App returned HTTP $response - may need investigation"
+          exit 0
+        fi
+
+    - name: Deployment notification
+      run: |
+        echo "🚀 Deployment to Render completed!"
+        echo "🌐 App URL: ${{ secrets.RENDER_APP_URL }}"

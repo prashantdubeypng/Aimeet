@@ -1,0 +1,45 @@
+name: Manual Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set deployment message
+      run: |
+        echo "🚀 Deploying to ${{ github.event.inputs.environment }}..."
+
+    - name: Deploy to Render
+      uses: johnbeynon/render-deploy-action@v0.0.8
+      with:
+        service-id: ${{ secrets.RENDER_SERVICE_ID }}
+        api-key: ${{ secrets.RENDER_API_KEY }}
+
+    - name: Post-deployment health check
+      run: |
+        echo "⏳ Waiting for deployment..."
+        sleep 60
+        echo "🔍 Running health check..."
+        response=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.RENDER_APP_URL }}/api/health/google/ || echo "000")
+        echo "Health check returned: HTTP $response"
+
+    - name: Deployment complete
+      run: |
+        echo "✅ Deployment to ${{ github.event.inputs.environment }} completed!"
+        echo "🌐 App URL: ${{ secrets.RENDER_APP_URL }}"

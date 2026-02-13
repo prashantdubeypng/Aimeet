@@ -1,5 +1,9 @@
 # AIMeet
 
+![CI](https://github.com/prashantdubeypng/Aimeet/workflows/CI%20-%20Tests%20and%20Checks/badge.svg)
+![Deploy](https://github.com/prashantdubeypng/Aimeet/workflows/CD%20-%20Deploy%20to%20Render/badge.svg)
+![Security](https://github.com/prashantdubeypng/Aimeet/workflows/Weekly%20Security%20Scan/badge.svg)
+
 AIMeet is an AI-powered meeting intelligence platform that captures, transcribes, and makes meeting knowledge instantly searchable. Unlike basic transcription tools, AIMeet understands context. It remembers what you discussed before, connects related past meetings to current agendas, and answers follow-up questions with full conversation history.
 
 This project is built with Django and integrates real-time video, cloud storage, transcription, vector search, and modern AI for intelligent meeting memory.

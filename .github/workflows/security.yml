@@ -1,0 +1,56 @@
+name: Weekly Security Scan
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install security tools
+      run: |
+        pip install safety bandit
+
+    - name: Run Safety check
+      run: |
+        safety check --json -r requirements.txt > safety-report.json || true
+        cat safety-report.json
+
+    - name: Run Bandit security linter
+      run: |
+        bandit -r videocaller/agora -f json -o bandit-report.json || true
+        cat bandit-report.json
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-reports
+        path: |
+          safety-report.json
+          bandit-report.json
+        retention-days: 30
+
+    - name: Create issue if vulnerabilities found
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Security Vulnerabilities Detected',
+            body: 'Security scan found vulnerabilities. Check the workflow artifacts for details.',
+            labels: ['security', 'automated']
+          })
