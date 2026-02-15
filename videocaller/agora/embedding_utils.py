@@ -14,9 +14,33 @@ logger = logging.getLogger(__name__)
 qdrant_client = QdrantClient(url=settings.QDRANT_URL, api_key=getattr(settings, 'QDRANT_API_KEY', None))
 
 EMBEDDING_MODEL = getattr(settings, 'HF_EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
-EMBEDDING_DIMENSION = int(getattr(settings, 'HF_EMBEDDING_DIMENSION', 384))
+EMBEDDING_DIMENSION = getattr(settings, 'HF_EMBEDDING_DIMENSION', None)
 COLLECTION_NAME = getattr(settings, 'QDRANT_COLLECTION_NAME', 'meeting_transcripts')
-embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+_embeddings = None
+
+
+def get_embeddings() -> HuggingFaceEmbeddings:
+    """Lazily initialize embeddings to reduce startup memory usage."""
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            model_kwargs={"device": "cpu"},
+        )
+    return _embeddings
+
+
+def get_embedding_dimension() -> int:
+    """Get embedding dimension from config or derive it from the model."""
+    if EMBEDDING_DIMENSION:
+        return int(EMBEDDING_DIMENSION)
+
+    embeddings = get_embeddings()
+    client = getattr(embeddings, "client", None)
+    if client and hasattr(client, "get_sentence_embedding_dimension"):
+        return int(client.get_sentence_embedding_dimension())
+
+    raise ValueError("HF_EMBEDDING_DIMENSION is not set and model dimension is unavailable")
 
 
 def ensure_collection_exists():
@@ -24,23 +48,25 @@ def ensure_collection_exists():
     try:
         collection = qdrant_client.get_collection(COLLECTION_NAME)
         existing_size = collection.config.params.vectors.size
-        if existing_size != EMBEDDING_DIMENSION:
+        desired_size = get_embedding_dimension()
+        if existing_size != desired_size:
             logger.warning(
                 "Qdrant collection size mismatch (%s != %s), recreating: %s",
                 existing_size,
-                EMBEDDING_DIMENSION,
+                desired_size,
                 COLLECTION_NAME
             )
             qdrant_client.delete_collection(COLLECTION_NAME)
             qdrant_client.create_collection(
                 collection_name=COLLECTION_NAME,
-                vectors_config=VectorParams(size=EMBEDDING_DIMENSION, distance=Distance.COSINE),
+                vectors_config=VectorParams(size=desired_size, distance=Distance.COSINE),
             )
     except Exception:
         logger.info(f"Creating Qdrant collection: {COLLECTION_NAME}")
+        desired_size = get_embedding_dimension()
         qdrant_client.create_collection(
             collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(size=EMBEDDING_DIMENSION, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=desired_size, distance=Distance.COSINE),
         )
 
     ensure_payload_indexes()
@@ -84,7 +110,7 @@ def get_vectorstore() -> QdrantVectorStore:
     return QdrantVectorStore(
         client=qdrant_client,
         collection_name=COLLECTION_NAME,
-        embedding=embeddings,
+        embedding=get_embeddings(),
     )
 
 
