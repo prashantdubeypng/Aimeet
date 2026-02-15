@@ -33,6 +33,14 @@ DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
 allowed_hosts = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1')
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts.split(',') if host.strip()]
 
+# Add Render.com domains automatically in production
+if not DEBUG:
+    # Auto-add *.onrender.com and *.onrender.io for Render deployments
+    render_domains = ['onrender.com', 'onrender.io']
+    current_host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+    if current_host and current_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(current_host)
+
 # Trust Render.com proxy headers
 if not DEBUG:
     CSRF_TRUSTED_ORIGINS = [f'https://{host}' for host in ALLOWED_HOSTS if host not in ['localhost', '127.0.0.1']]

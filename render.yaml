@@ -1,12 +1,11 @@
 services:
   - type: web
     name: aimeet
-    runtime: python
+    runtime: docker
     region: oregon
     plan: starter
     branch: master
-    buildCommand: "./build.sh"
-    startCommand: "daphne -b 0.0.0.0 -p $PORT videocaller.videocaller.asgi:application"
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4
@@ -75,12 +74,11 @@ services:
 
   - type: worker
     name: aimeet-worker
-    runtime: python
+    runtime: docker
     region: oregon
     plan: starter
     branch: master
-    buildCommand: "./build.sh"
-    startCommand: "python videocaller/manage.py qcluster"
+    dockerfilePath: ./Dockerfile.worker
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4

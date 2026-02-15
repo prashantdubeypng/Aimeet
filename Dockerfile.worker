@@ -22,20 +22,6 @@ RUN pip install --upgrade pip && \
 # Copy project
 COPY videocaller/ ./videocaller/
 
-# Collect static files
+# Run qcluster worker
 WORKDIR /app/videocaller
-RUN python manage.py collectstatic --no-input
-
-# Copy startup scripts
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8000/', timeout=5)" || exit 1
-
-# Run startup script (migrations + Daphne)
-CMD ["/app/start.sh"]
+CMD ["python", "manage.py", "qcluster"]
