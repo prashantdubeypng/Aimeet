@@ -54,9 +54,9 @@ def get_pusher_client():
 
 
 def generate_room_code():
-    """Generate a unique 9-character room code like abc-def-ghi"""
+    """Generate a unique 8-character room code like abc-d-ghi"""
     chars = string.ascii_lowercase + string.digits
-    code = '-'.join([''.join(random.choices(chars, k=3)) for _ in range(3)])
+    code = '-'.join([''.join(random.choices(chars, k=3)), random.choice(chars), ''.join(random.choices(chars, k=3))])
     return code
 
 

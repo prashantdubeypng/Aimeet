@@ -4,7 +4,7 @@ import uuid
 
 class MeetingRoom(models.Model):
     room_id = models.CharField(max_length=100, unique=True, default=uuid.uuid4)
-    room_code = models.CharField(max_length=10, unique=True)  # Shareable code like "abc-def-ghi"
+    room_code = models.CharField(max_length=15, unique=True)  # Shareable code like "abc-def-ghi"
     host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hosted_meetings')
     title = models.CharField(max_length=255, blank=True)
     description = models.TextField(blank=True)
