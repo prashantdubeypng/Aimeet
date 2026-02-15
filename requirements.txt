@@ -20,7 +20,7 @@ qdrant-client==1.10.1
 langchain-text-splitters==0.2.4
 langchain-huggingface==0.0.3
 sentence-transformers==2.7.0
-torch==2.1.2+cpu
+torch==2.2.2+cpu
 psycopg2-binary==2.9.9
 gunicorn==21.2.0
 whitenoise==6.6.0
