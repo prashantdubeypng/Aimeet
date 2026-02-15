@@ -49,6 +49,10 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+# Authentication redirects
+LOGIN_REDIRECT_URL = 'home'  # Redirect to home page after login
+LOGOUT_REDIRECT_URL = 'login'  # Redirect to login after logout
+LOGIN_URL = 'login'  # Where to redirect for @login_required
 
 # Application definition
 
@@ -102,10 +106,11 @@ ASGI_APPLICATION = 'videocaller.asgi.application'
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
 # Use PostgreSQL on production (Render), SQLite for local dev
-if os.environ.get('DATABASE_URL'):
+database_url = os.environ.get('DATABASE_URL', '').strip()
+if database_url:
     DATABASES = {
         'default': dj_database_url.config(
-            default=os.environ.get('DATABASE_URL'),
+            default=database_url,
             conn_max_age=600,
             conn_health_checks=True,
         )
