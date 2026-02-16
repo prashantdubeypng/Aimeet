@@ -3,6 +3,7 @@ version: "3.8"
 services:
   web:
     build: .
+    working_dir: /app/videocaller
     command: daphne -b 0.0.0.0 -p 8000 videocaller.asgi:application
     volumes:
       - ./videocaller:/app/videocaller
@@ -11,22 +12,27 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/aimeet
       - REDIS_URL=redis://redis:6379/0
 
   worker:
     build: .
-    command: python videocaller/manage.py qcluster
+    working_dir: /app/videocaller
+    command: python manage.py qcluster
     volumes:
       - ./videocaller:/app/videocaller
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/aimeet
       - REDIS_URL=redis://redis:6379/0
@@ -46,6 +52,11 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   nginx:
     image: nginx:alpine
