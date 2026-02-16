@@ -14,7 +14,7 @@ langchain==0.2.16
 langchain-core==0.2.38
 langchain-google-genai==1.0.10
 langchain-qdrant==0.1.4
-qdrant-client==1.10.1
+qdrant-client==1.7.3
 langchain-text-splitters==0.2.4
 langchain-huggingface==0.0.3
 sentence-transformers==2.7.0
